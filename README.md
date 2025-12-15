@@ -1,2 +1,3 @@
 # DocuChat
-Document Chat with Gemini
+
+This project allows users to chat with documents using the Gemini AI model.
