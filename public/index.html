@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuChat</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+
+<body class="bg-gray-900 text-gray-100 min-h-screen flex">
+  <div class="flex-1 flex flex-col h-screen overflow-hidden">
+    <!-- Header -->
+    <a href="">
+      <div class="px-6 py-4 border-b border-gray-700">
+        <h1 class="text-3xl font-bold text-white">DocuChat</h1>
+        <p class="text-gray-400 mt-1">AI-powered document chat</p>
+      </div>
+    </a>
+
+    <!-- Meetings Container -->
+    <div class="flex-1 overflow-y-auto px-6 py-4">
+      <h2 class="text-2xl font-bold text-white mb-6">Meetings</h2>
+
+      <!-- Loading Indicator -->
+      <div id="loadingIndicator" class="text-center text-gray-400 py-8">
+        <p>Loading meetings...</p>
+      </div>
+
+      <!-- Empty State -->
+      <div id="emptyState" class="hidden text-center text-gray-400 py-12">
+        <p class="text-lg">No meetings found</p>
+        <p class="text-sm mt-2">There are no meetings available at this time</p>
+      </div>
+
+      <!-- Meetings List -->
+      <div id="meetingsList" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Meetings will be rendered here -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const endpoints = {
+      getMeetings: '/api/get_meetings'
+    };
+
+    async function getMeetings() {
+      try {
+        const response = await fetch(endpoints.getMeetings);
+        if (!response.ok) {
+          throw new Error('Failed to fetch meetings');
+        }
+        const meetings = await response.json();
+        renderMeetings(meetings);
+      } catch (error) {
+        console.error('Error fetching meetings:', error);
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        loadingIndicator.innerHTML = '<p class="text-red-400">Error loading meetings</p>';
+      }
+    }
+
+    function renderMeetings(meetings) {
+      const loadingIndicator = document.getElementById('loadingIndicator');
+      const emptyState = document.getElementById('emptyState');
+      const meetingsList = document.getElementById('meetingsList');
+
+      // Hide loading indicator
+      loadingIndicator.classList.add('hidden');
+
+      if (!meetings || meetings.length === 0) {
+        emptyState.classList.remove('hidden');
+        meetingsList.classList.add('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+      meetingsList.classList.remove('hidden');
+
+      // Clear existing meetings
+      meetingsList.innerHTML = '';
+
+      // Render each meeting
+      meetings.forEach(meeting => {
+        const meetingCard = document.createElement('div');
+        meetingCard.className = 'bg-gray-800 rounded-lg p-6 border border-gray-700 hover:border-blue-500 hover:bg-gray-750 transition-all duration-200 cursor-pointer';
+        meetingCard.onclick = () => {
+          window.location.href = `/chat?meeting_id=${meeting.id}`;
+        };
+
+        const title = document.createElement('h3');
+        title.className = 'text-xl font-semibold text-white mb-2';
+        title.textContent = meeting.title || `Meeting ${meeting.id}`;
+        meetingCard.appendChild(title);
+
+        if (meeting.file) {
+          const fileInfo = document.createElement('p');
+          fileInfo.className = 'text-sm text-gray-400 mb-1';
+          fileInfo.textContent = `File: ${meeting.file}`;
+          meetingCard.appendChild(fileInfo);
+        }
+
+        const meetingId = document.createElement('p');
+        meetingId.className = 'text-xs text-gray-500 mt-4';
+        meetingId.textContent = `ID: ${meeting.id}`;
+        meetingCard.appendChild(meetingId);
+
+        meetingsList.appendChild(meetingCard);
+      });
+    }
+
+    function init() {
+      getMeetings();
+    }
+
+    init();
+  </script>
+</body>
+
+</html>

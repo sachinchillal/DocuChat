@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DocuChat</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+  <style>
+    /* Markdown styling for chat messages */
+    .markdown-content h1,
+    .markdown-content h2,
+    .markdown-content h3 {
+      font-weight: bold;
+      margin-top: 1em;
+      margin-bottom: 0.5em;
+    }
+
+    .markdown-content h1 {
+      font-size: 1.5em;
+    }
+
+    .markdown-content h2 {
+      font-size: 1.3em;
+    }
+
+    .markdown-content h3 {
+      font-size: 1.1em;
+    }
+
+    .markdown-content p {
+      margin-bottom: 0.75em;
+    }
+
+    .markdown-content ul {
+      list-style-type: disc;
+    }
+
+    .markdown-content ol {
+      list-style-type: decimal;
+    }
+
+    .markdown-content ul,
+    .markdown-content ol {
+      margin-left: 1.5em;
+      margin-bottom: 0.75em;
+    }
+
+    .markdown-content li {
+      margin-bottom: 0.25em;
+    }
+
+    .markdown-content strong {
+      font-weight: bold;
+    }
+
+    .markdown-content em {
+      font-style: italic;
+    }
+
+    .markdown-content code {
+      background-color: rgba(0, 0, 0, 0.2);
+      padding: 0.125em 0.25em;
+      border-radius: 0.25em;
+      font-family: monospace;
+      font-size: 0.9em;
+    }
+
+    .markdown-content pre {
+      background-color: rgba(0, 0, 0, 0.3);
+      padding: 0.75em;
+      border-radius: 0.5em;
+      overflow-x: auto;
+      margin-bottom: 0.75em;
+    }
+
+    .markdown-content pre code {
+      background-color: transparent;
+      padding: 0;
+    }
+
+    .markdown-content a {
+      color: inherit;
+      text-decoration: underline;
+      opacity: 0.8;
+    }
+
+    .markdown-content a:hover {
+      opacity: 1;
+    }
+
+    .markdown-content blockquote {
+      border-left: 3px solid rgba(255, 255, 255, 0.3);
+      padding-left: 1em;
+      margin-left: 0;
+      margin-bottom: 0.75em;
+      opacity: 0.9;
+    }
+  </style>
+</head>
+
+<body class="bg-gray-900 text-gray-100 min-h-screen flex">
+  <div class="flex-1 flex flex-col h-screen overflow-hidden">
+    <!-- Header -->
+    <div class="px-6 py-4 border-b border-gray-700">
+      <a href="">
+        <h1 class="text-3xl font-bold text-white">DocuChat</h1>
+      </a>
+      <div class="flex justify-between">
+        <p class="text-gray-400 mt-1">AI-powered document chat</p>
+        <a href="/">Home</a>
+      </div>
+    </div>
+
+    <!-- Chat Container -->
+    <div id="chatContainer" class="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+      <!-- Chat messages will be rendered here -->
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="loadingIndicator" class="text-center text-gray-400 py-8">
+      <p>Loading chat history...</p>
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="hidden text-center text-gray-400 py-12">
+      <p class="text-lg">No chat history yet</p>
+      <p class="text-sm mt-2">Start a conversation to see messages here</p>
+    </div>
+  </div>
+
+  <!-- Right Sidebar with Chat Input -->
+  <div class="w-80 border-l border-gray-700 flex flex-col h-screen bg-gray-800">
+    <div class="p-4 border-b border-gray-700">
+      <h2 class="text-lg font-semibold text-white">New Message</h2>
+    </div>
+
+    <!-- Chat Input Area -->
+    <div class="flex-1 flex flex-col p-4">
+      <div class="flex flex-col gap-3 mt-auto">
+        <textarea id="chatInput" placeholder="Type your message..." rows="4"
+          class="w-full bg-gray-700 text-gray-100 border border-gray-600 rounded-lg px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          onkeypress="handleKeyPress(event)"></textarea>
+        <button id="sendButton" onclick="sendMessage()"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed">
+          Send
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const endpoints = {
+      getChatHistory: '/api/get_chat_history',
+      sendMessage: '/api/send_message'
+    };
+    // http://localhost:8000/chat/?meeting_id=1
+    let meetingId = parseInt(window.location.search.split('=')[1]);
+    console.log(meetingId);
+    function parseMessageContent(text) {
+      // Handle case where text might already be an object
+      if (typeof text === 'object' && text !== null) {
+        return text;
+      }
+
+      // Try to parse as JSON if it's a string
+      if (typeof text === 'string') {
+        try {
+          const parsed = JSON.parse(text);
+          if (typeof parsed === 'object' && parsed !== null) {
+            return parsed;
+          }
+        } catch (e) {
+          // Not JSON, return as is
+        }
+      }
+
+      return text;
+    }
+
+    function renderMessage(message) {
+      const isUser = message.role === 'user';
+      const rawText = message.parts[0]?.text || '';
+      const parsedContent = parseMessageContent(rawText);
+
+      const messageDiv = document.createElement('div');
+      messageDiv.className = `flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`;
+
+      const bubbleDiv = document.createElement('div');
+      bubbleDiv.className = `max-w-[80%] rounded-lg px-4 py-3 ${isUser
+        ? 'bg-blue-600 text-white'
+        : 'bg-gray-700 text-gray-100'
+        }`;
+
+      const roleLabel = document.createElement('div');
+      roleLabel.className = `text-xs font-semibold mb-2 ${isUser ? 'text-blue-200' : 'text-gray-300'
+        }`;
+      roleLabel.textContent = isUser ? 'You' : 'AI';
+
+      bubbleDiv.appendChild(roleLabel);
+
+      // Check if content has subject and body (email format)
+      if (typeof parsedContent === 'object' && parsedContent !== null && parsedContent.subject && parsedContent.body) {
+        // Render subject as heading
+        const subjectDiv = document.createElement('div');
+        subjectDiv.className = `font-bold text-base mb-3 ${isUser ? 'text-white' : 'text-white'}`;
+        subjectDiv.textContent = parsedContent.subject;
+        bubbleDiv.appendChild(subjectDiv);
+
+        // Render body as markdown
+        const bodyDiv = document.createElement('div');
+        bodyDiv.className = 'break-words text-sm leading-relaxed markdown-content';
+
+        // Configure marked options
+        if (typeof marked !== 'undefined') {
+          marked.setOptions({
+            breaks: true,
+            gfm: true
+          });
+          bodyDiv.innerHTML = marked.parse(parsedContent.body);
+        } else {
+          // Fallback if marked is not loaded
+          bodyDiv.className += ' whitespace-pre-wrap';
+          bodyDiv.textContent = parsedContent.body;
+        }
+
+        bubbleDiv.appendChild(bodyDiv);
+      } else {
+        // Regular text message
+        const textContent = document.createElement('div');
+        textContent.className = 'whitespace-pre-wrap break-words';
+
+        // Check if it's JSON and format accordingly
+        const displayText = typeof parsedContent === 'object'
+          ? JSON.stringify(parsedContent, null, 2)
+          : (typeof rawText === 'string' ? rawText : String(rawText));
+
+        if (displayText.startsWith('{') || displayText.startsWith('[')) {
+          textContent.className += ' font-mono text-sm';
+        }
+
+        textContent.textContent = displayText;
+        bubbleDiv.appendChild(textContent);
+      }
+
+      messageDiv.appendChild(bubbleDiv);
+
+      return messageDiv;
+    }
+
+    function renderChatHistory(chatHistory) {
+      const container = document.getElementById('chatContainer');
+      const loadingIndicator = document.getElementById('loadingIndicator');
+      const emptyState = document.getElementById('emptyState');
+
+      // Hide loading indicator
+      loadingIndicator.classList.add('hidden');
+
+      if (!chatHistory || chatHistory.length === 0) {
+        emptyState.classList.remove('hidden');
+        container.classList.add('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+      container.classList.remove('hidden');
+
+      // Clear existing messages
+      container.innerHTML = '';
+
+      // Render each message
+      chatHistory.forEach(message => {
+        const messageElement = renderMessage(message);
+        container.appendChild(messageElement);
+      });
+
+      // Scroll to bottom
+      scrollToBottom();
+    }
+
+    function scrollToBottom() {
+      const container = document.getElementById('chatContainer');
+      container.scrollTop = container.scrollHeight;
+    }
+
+    async function getChatHistory() {
+      try {
+        const response = await fetch(endpoints.getChatHistory + "/" + meetingId);
+        const data = await response.json();
+        renderChatHistory(data);
+      } catch (error) {
+        console.error('Error fetching chat history:', error);
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        loadingIndicator.innerHTML = '<p class="text-red-400">Error loading chat history</p>';
+      }
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById('chatInput');
+      const sendButton = document.getElementById('sendButton');
+      const message = input.value.trim();
+
+      if (!message) {
+        return;
+      }
+
+      // Disable input and button while sending
+      input.disabled = true;
+      sendButton.disabled = true;
+      sendButton.textContent = 'Sending...';
+
+      try {
+        // Add user message to UI immediately
+        const userMessage = {
+          role: 'user',
+          parts: [{ text: message }]
+        };
+        const container = document.getElementById('chatContainer');
+        const messageElement = renderMessage(userMessage);
+        container.appendChild(messageElement);
+        scrollToBottom();
+
+        // Clear input
+        input.value = '';
+
+        // Hide empty state if visible
+        const emptyState = document.getElementById('emptyState');
+        emptyState.classList.add('hidden');
+        container.classList.remove('hidden');
+
+        // Send message to API
+        const response = await fetch(endpoints.sendMessage, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ message: message, meeting_id: meetingId })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to send message');
+        }
+
+        // Reload chat history to show AI response
+        await getChatHistory();
+      } catch (error) {
+        console.error('Error sending message:', error);
+        alert('Failed to send message. Please try again.');
+      } finally {
+        // Re-enable input and button
+        input.disabled = false;
+        sendButton.disabled = false;
+        sendButton.textContent = 'Send';
+        input.focus();
+      }
+    }
+
+    function handleKeyPress(event) {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+      }
+      // Shift+Enter will allow new line (default behavior)
+    }
+
+    function init() {
+      getChatHistory();
+      // Focus on input when page loads
+      document.getElementById('chatInput').focus();
+    }
+
+    init();
+  </script>
+</body>
+
+</html>
